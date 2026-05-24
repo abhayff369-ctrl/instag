@@ -17,73 +17,85 @@ export default async function handler(req, res) {
     const clean = username.replace("@", "");
 
     const response = await fetch(
-      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`,
+      `https://www.instagram.com/${clean}/`,
       {
-        method: "GET",
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-          "X-IG-App-ID": "936619743392459",
-          "X-Requested-With": "XMLHttpRequest",
-          "Referer": `https://www.instagram.com/${clean}/`,
-          "Accept": "*/*"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
       }
     );
 
-    // TEXT FIRST
-    const textResponse = await response.text();
+    const html = await response.text();
 
-    // EMPTY RESPONSE CHECK
-    if (!textResponse || textResponse.length < 5) {
+    if (!html.includes("profile_pic_url")) {
       return res.status(500).json({
         success: false,
-        error: "Empty response from Instagram"
+        error: "Instagram blocked request"
       });
     }
 
-    let json;
+    // EXTRACT JSON
+    const jsonMatch = html.match(
+      /"profilePage_(.*?)",/s
+    );
 
-    // SAFE JSON PARSE
-    try {
-      json = JSON.parse(textResponse);
-    } catch (e) {
-      return res.status(500).json({
-        success: false,
-        error: "Instagram blocked request",
-        raw: textResponse.substring(0, 300)
-      });
-    }
+    // PROFILE PIC
+    const picMatch = html.match(
+      /"profile_pic_url_hd":"(.*?)"/
+    );
 
-    if (!json.data || !json.data.user) {
-      return res.status(404).json({
-        success: false,
-        error: "User not found"
-      });
-    }
+    // FULL NAME
+    const nameMatch = html.match(
+      /"full_name":"(.*?)"/
+    );
 
-    const user = json.data.user;
+    // BIO
+    const bioMatch = html.match(
+      /"biography":"(.*?)"/
+    );
+
+    // FOLLOWERS
+    const followersMatch = html.match(
+      /"edge_followed_by":{"count":(.*?)}/
+    );
+
+    // FOLLOWING
+    const followingMatch = html.match(
+      /"edge_follow":{"count":(.*?)}/
+    );
+
+    // POSTS
+    const postMatch = html.match(
+      /"edge_owner_to_timeline_media":{"count":(.*?)}/
+    );
+
+    // VERIFIED
+    const verifiedMatch = html.match(
+      /"is_verified":(true|false)/
+    );
+
+    // PRIVATE
+    const privateMatch = html.match(
+      /"is_private":(true|false)/
+    );
 
     const resultText = `
 🔍 INSTAGRAM LOOKUP RESULT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Lookup Result for: @${user.username}
+Lookup Result for: @${clean}
 ────────────────────────
 
-🆔 ID: ${user.id || "N/A"}
-👤 Username: @${user.username}
-📛 Full Name: ${user.full_name || "N/A"}
-📝 Bio: ${user.biography || "N/A"}
-🔒 Private: ${user.is_private ? "Yes" : "No"}
-✅ Verified: ${user.is_verified ? "Yes" : "No"}
-🏢 Business: ${user.is_professional_account ? "Yes" : "No"}
-📚 Category: ${user.category_name || "N/A"}
-🔗 External URL: ${user.external_url || "N/A"}
-👥 Followers: ${user.edge_followed_by?.count || 0}
-👣 Following: ${user.edge_follow?.count || 0}
-📸 Posts: ${user.edge_owner_to_timeline_media?.count || 0}
-🖼️ Profile Pic: ${user.profile_pic_url_hd || user.profile_pic_url}
+👤 Username: @${clean}
+📛 Full Name: ${nameMatch ? nameMatch[1] : "N/A"}
+📝 Bio: ${bioMatch ? bioMatch[1] : "N/A"}
+🔒 Private: ${privateMatch && privateMatch[1] === "true" ? "Yes" : "No"}
+✅ Verified: ${verifiedMatch && verifiedMatch[1] === "true" ? "Yes" : "No"}
+👥 Followers: ${followersMatch ? followersMatch[1] : "0"}
+👣 Following: ${followingMatch ? followingMatch[1] : "0"}
+📸 Posts: ${postMatch ? postMatch[1] : "0"}
+🖼️ Profile Pic: ${picMatch ? picMatch[1].replace(/\\u0026/g, "&") : "N/A"}
 
 ────────────────────────
 `;
